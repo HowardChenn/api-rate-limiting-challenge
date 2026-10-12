@@ -9,7 +9,6 @@ import { app } from "../../src/app.js";
 
 describe("temporary overrides", () => {
   let prefix: string;
-
   beforeAll(async () => {
     if (!redis.isOpen) {
       await redis.connect();
@@ -39,6 +38,7 @@ describe("temporary overrides", () => {
     }
   });
 
+  // override value acceptance
   it.each([500, 1000])("accepts and enforces an integer override of %i", async (limit) => {
     const clientIp = "203.0.113.50";
     const overrideKey = buildRateLimitOverrideKey(prefix, "client-a");
@@ -71,6 +71,7 @@ describe("temporary overrides", () => {
     expect(await redis.zCard(requestKey)).toBe(limit);
   });
 
+  // override value rejection
   it.each(["1001", "500.5"])("ignores the invalid override %s and enforces the normal limit", async (value) => {
     const overrideKey = buildRateLimitOverrideKey(prefix, "client-a");
     await redis.set(overrideKey, value, { EX: 60 });

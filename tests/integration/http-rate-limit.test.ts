@@ -6,7 +6,6 @@ import { redis } from "../../src/config/redis.js";
 
 describe("HTTP rate limiting", () => {
   let prefix: string;
-
   beforeAll(async () => {
     if (!redis.isOpen) {
       await redis.connect();
