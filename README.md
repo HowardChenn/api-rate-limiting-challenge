@@ -20,21 +20,24 @@ npm run dev
 
 **API examples — run in another terminal**
 
-These use the values in `.env.example`: port `3000`, API key `local-demo-key`, prefix `rl:v1`, and client ID `demo-client`. If your existing `.env` differs, update the commands to match.
+Run these from the repository root. Load your `.env` in this terminal so authenticated requests use your configured `DEMO_API_KEY`. The commands assume port `3000`, prefix `rl:v1`, and client ID `demo-client`; update those if your `.env` differs.
 
 ```bash
+# Load the API key from your local configuration.
+source .env
+
 # Products: anonymous and authenticated
 curl -i http://localhost:3000/api/products
-curl -i -H 'Authorization: Bearer local-demo-key' http://localhost:3000/api/products
+curl -i -H "Authorization: Bearer ${DEMO_API_KEY}" http://localhost:3000/api/products
 
 # Account: authenticated, missing key, and invalid key
-curl -i -H 'Authorization: Bearer local-demo-key' http://localhost:3000/api/account
+curl -i -H "Authorization: Bearer ${DEMO_API_KEY}" http://localhost:3000/api/account
 curl -i http://localhost:3000/api/account
 curl -i -H 'Authorization: Bearer wrong-api-key' http://localhost:3000/api/account
 
 # Login: anonymous and authenticated
 curl -i -X POST http://localhost:3000/api/login
-curl -i -X POST -H 'Authorization: Bearer local-demo-key' http://localhost:3000/api/login
+curl -i -X POST -H "Authorization: Bearer ${DEMO_API_KEY}" http://localhost:3000/api/login
 
 # Exceed the anonymous login limit (earlier requests also count).
 # With an empty login log: ten 200 responses, then 429.
@@ -44,7 +47,7 @@ done
 
 # Raise demo-client's default-policy ceiling to 500 for 60 seconds.
 docker compose exec redis redis-cli SET rl:v1:override:demo-client 500 EX 60
-curl -i -H 'Authorization: Bearer local-demo-key' http://localhost:3000/api/products
+curl -i -H "Authorization: Bearer ${DEMO_API_KEY}" http://localhost:3000/api/products
 
 # Inspect expiry, then remove the override.
 docker compose exec redis redis-cli TTL rl:v1:override:demo-client
