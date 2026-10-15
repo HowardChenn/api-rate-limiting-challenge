@@ -5,7 +5,9 @@ import type { RateLimitService } from "../../src/rate-limit/service.js";
 import { rateLimitPolicies } from "../../src/rate-limit/policies.js";
 
 describe("createRateLimit", () => {
+  // allow request 
   it("calls next when the request is allowed", async () => {
+    // assemble 
     const mockNext = vi.fn();
 
     const mockRequest = {
@@ -27,8 +29,10 @@ describe("createRateLimit", () => {
       }),
     };
 
+    // act 
     const rateLimitMiddleware = createRateLimit(mockRateLimitService);
-
+    
+    // assert 
     await rateLimitMiddleware(mockRequest, mockResponse, mockNext);
 
     expect(mockNext).toHaveBeenCalledTimes(1);
@@ -37,6 +41,7 @@ describe("createRateLimit", () => {
     expect(mockResponse.json).not.toHaveBeenCalled();
   });
 
+  // reject request
   it("returns 429 when the request is rejected", async () => {
     const mockNext = vi.fn();
 
@@ -73,6 +78,7 @@ describe("createRateLimit", () => {
     expect(mockNext).not.toHaveBeenCalled();
   });
 
+  // auth - default - limit 200 - override id
   it("passes the client ID for an authenticated default request", async () => {
     const mockNext = vi.fn();
 
@@ -111,6 +117,7 @@ describe("createRateLimit", () => {
     });
   });
 
+  // auth - login - limit 20 - no override 
   it("does not pass an override client ID for an authenticated login request", async () => {
     const mockNext = vi.fn();
 
@@ -149,6 +156,7 @@ describe("createRateLimit", () => {
     });
   });
 
+  // anonymous - default - limit 100 - no override
   it("uses the anonymous default limit without an override client ID", async () => {
     const mockNext = vi.fn();
 

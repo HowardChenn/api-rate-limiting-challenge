@@ -54,24 +54,38 @@ docker compose exec redis redis-cli TTL rl:v1:override:demo-client
 docker compose exec redis redis-cli DEL rl:v1:override:demo-client
 ```
 
-**Tests — Redis must be running; a separate API server is unnecessary**
+**Tests**
+
+Run commands from the folder containing `package.json`. A separate API server is unnecessary; HTTP integration tests exercise the Express app directly through Supertest.
+
+| Tests | Requirements |
+|---|---|
+| Authentication and key unit tests | No running Redis or `.env` file required. Authentication tests supply and restore their own environment values. |
+| Rate-limit middleware unit tests | `REDIS_URL` must be configured through `.env` or the environment because importing the middleware loads Redis configuration. The tests use a fake service and do not connect to Redis. |
+| Integration tests | A running Redis instance and `REDIS_URL` pointing to it. Tests supply their own key prefixes and authentication values where needed. |
 
 ```bash
-# All tests, or watch mode
+# Unit tests only (no running Redis required)
+npm test -- tests/unit
+
+# Integration tests or the full suite (configure REDIS_URL first)
+docker compose up -d
+npm test -- tests/integration
 npm test
+
+# Watch all tests (same requirements as the full suite)
 npm run test:watch
 
-# Unit or integration tests separately
-npm test -- tests/unit
-npm test -- tests/integration
-
 # Individual suites
+npm test -- tests/unit/authenticate.test.ts
 npm test -- tests/unit/key.test.ts
 npm test -- tests/unit/rate-limit.test.ts
 npm test -- tests/integration/redis-rate-limit-service.test.ts
 npm test -- tests/integration/http-rate-limit.test.ts
 npm test -- tests/integration/temporary-override.test.ts
 ```
+
+Vitest runs the tests without full TypeScript type checking. `npm run build` type-checks and compiles application source only; the current `tsconfig.json` does not include test files. Passing tests therefore does not guarantee that test files have no TypeScript errors.
 
 **Build and Redis management**
 
@@ -139,10 +153,10 @@ An override must be an integer above the normal limit and no higher than 1000. F
 | `src/rate-limit/redis-service.ts` | Implements the check using Redis and Lua. |
 | `src/rate-limit/key.ts` | Builds request-log and override keys. |
 | `src/types/express.d.ts` | Adds optional authentication data to Express's request type. |
-| `tests/unit/` | Checks key formats and middleware using a fake service. |
+| `tests/unit/` | Checks authentication, protected-route access, key formats, and rate-limit middleware using a fake service. |
 | `tests/integration/` | Checks Redis behaviour, HTTP responses, concurrency, and overrides. |
 
-The service interface lets middleware tests substitute a fake implementation. Integration tests use unique Redis prefixes and clean up their keys. All tests require `.env`; integration tests also require Redis. The suite contains 33 tests across five files. The build type-checks application source; test files are run by Vitest.
+The service interface lets rate-limit middleware tests substitute a fake implementation. Authentication unit tests cover valid, invalid, missing, and malformed credentials, missing configuration, and protected-route access. Integration tests use unique Redis prefixes and clean up their keys.
 
 ## Local scope
 
