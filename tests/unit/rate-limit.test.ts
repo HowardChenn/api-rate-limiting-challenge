@@ -7,7 +7,7 @@ import { rateLimitPolicies } from "../../src/rate-limit/policies.js";
 describe("createRateLimit", () => {
   // allow request 
   it("calls next when the request is allowed", async () => {
-    // assemble 
+    // arrange  
     const mockNext = vi.fn();
 
     const mockRequest = {
@@ -29,12 +29,12 @@ describe("createRateLimit", () => {
       }),
     };
 
-    // act 
     const rateLimitMiddleware = createRateLimit(mockRateLimitService);
+
+    // act 
+    await rateLimitMiddleware(mockRequest, mockResponse, mockNext);    
     
     // assert 
-    await rateLimitMiddleware(mockRequest, mockResponse, mockNext);
-
     expect(mockNext).toHaveBeenCalledTimes(1);
     expect(mockNext).toHaveBeenCalledWith();
     expect(mockResponse.status).not.toHaveBeenCalled();
