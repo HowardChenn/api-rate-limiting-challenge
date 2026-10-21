@@ -60,8 +60,7 @@ Run commands from the folder containing `package.json`. A separate API server is
 
 | Tests | Requirements |
 |---|---|
-| Authentication and key unit tests | No running Redis or `.env` file required. Authentication tests supply and restore their own environment values. |
-| Rate-limit middleware unit tests | `REDIS_URL` must be configured through `.env` or the environment because importing the middleware loads Redis configuration. The tests use a fake service and do not connect to Redis. |
+| Unit tests | No running Redis or `.env` file required. Tests inject fake services and supply their own authentication configuration. App-wiring tests use a local HTTP listener. |
 | Integration tests | A running Redis instance and `REDIS_URL` pointing to it. Tests supply their own key prefixes and authentication values where needed. |
 
 ```bash
@@ -80,6 +79,7 @@ npm run test:watch
 npm test -- tests/unit/authenticate.test.ts
 npm test -- tests/unit/key.test.ts
 npm test -- tests/unit/rate-limit.test.ts
+npm test -- tests/unit/app.test.ts
 npm test -- tests/integration/redis-rate-limit-service.test.ts
 npm test -- tests/integration/http-rate-limit.test.ts
 npm test -- tests/integration/temporary-override.test.ts
@@ -120,7 +120,7 @@ Both policies use a rolling one-hour window.
 | Default | 100 | 200 | Products, account, and other requests outside the login policy. |
 | Login | 10 | 20 | Login POST requests, including casing and trailing-slash variants. |
 
-Authentication identifies the client first. Rate limiting then selects the policy and limit, asks Redis for a decision, and either returns `429` or continues to the route.
+Authentication identifies the client first. `app.ts` selects the policy and dispatches to one of two limiters created with `createRateLimit(service, policy)`. Each limiter chooses the authentication-specific limit, asks Redis for a decision, and either returns `429` or continues to the route. Every request is checked once, including unknown routes. Missing IP addresses and service errors throw; Express 5 forwards these errors to its error handler.
 
 - Products returns an empty product list and authentication status.
 - Account requires authentication and returns the client ID. Missing or invalid keys return `401` if rate limiting allows the request; otherwise they return `429` first.
@@ -143,13 +143,15 @@ An override must be an integer above the normal limit and no higher than 1000. F
 | File or folder | Role |
 |---|---|
 | `src/server.ts` | Connects Redis and starts the HTTP server. |
-| `src/app.ts` | Registers middleware and routes. |
-| `src/config/redis.ts` | Creates the shared Redis client. |
-| `src/middleware/authenticate.ts` | Identifies authenticated clients and provides the account access check. |
-| `src/middleware/rate-limit.ts` | Selects policies, chooses limits, and handles the decision. |
+| `src/app.ts` | Selects policies, creates the two limiters, and registers middleware and routes. |
+| `src/config/env.ts` | Loads and exposes environment configuration. |
+| `src/infrastructure/redis.ts` | Creates the shared Redis client. |
+| `src/auth/middleware.ts` | Identifies authenticated clients and provides the account access check. |
+| `src/auth/service.ts` | Validates the configured demo bearer token. |
+| `src/auth/types.ts` | Defines the authenticated client shape. |
+| `src/rate-limit/middleware.ts` | Receives a policy, chooses the limit, and handles the service decision. |
 | `src/rate-limit/policies.ts` | Defines policy values. |
-| `src/rate-limit/types.ts` | Defines policy and decision shapes. |
-| `src/rate-limit/service.ts` | Defines the check input and service interface. |
+| `src/rate-limit/types.ts` | Defines policies, decisions, check inputs, and the service interface. |
 | `src/rate-limit/redis-service.ts` | Implements the check using Redis and Lua. |
 | `src/rate-limit/key.ts` | Builds request-log and override keys. |
 | `src/types/express.d.ts` | Adds optional authentication data to Express's request type. |

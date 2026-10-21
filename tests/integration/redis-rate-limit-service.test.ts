@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { redis } from "../../src/config/redis.js";
+import { redis } from "../../src/infrastructure/redis.js";
 import { buildRateLimitKey } from "../../src/rate-limit/key.js";
 import { rateLimitPolicies } from "../../src/rate-limit/policies.js";
 import { RedisRateLimitService } from "../../src/rate-limit/redis-service.js";

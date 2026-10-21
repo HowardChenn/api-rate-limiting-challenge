@@ -1,7 +1,7 @@
-import "dotenv/config";
+import { env } from "../config/env.js";
 import { createClient } from "redis";
 
-const redisUrl = process.env.REDIS_URL;
+const redisUrl = env.redisUrl;
 
 if (!redisUrl) {
   throw new Error("REDIS_URL is not configured");

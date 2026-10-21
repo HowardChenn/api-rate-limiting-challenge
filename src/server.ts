@@ -1,8 +1,8 @@
-import "dotenv/config";
+import { env } from "./config/env.js";
 import { app } from "./app.js";
-import { redis } from "./config/redis.js";
+import { redis } from "./infrastructure/redis.js";
 
-const port = Number(process.env.PORT ?? 3000);
+const port = env.port;
 
 try {
   await redis.connect();

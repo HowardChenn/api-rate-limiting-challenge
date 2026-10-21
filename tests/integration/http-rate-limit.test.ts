@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { app } from "../../src/app.js";
-import { redis } from "../../src/config/redis.js";
+import { redis } from "../../src/infrastructure/redis.js";
 
 describe("HTTP rate limiting", () => {
   let prefix: string;

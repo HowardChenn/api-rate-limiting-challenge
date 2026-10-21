@@ -3,7 +3,7 @@ import type { Request, Response } from "express";
 import {
   authenticate,
   requireAuthentication,
-} from "../../src/middleware/authenticate.js";
+} from "../../src/auth/middleware.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();

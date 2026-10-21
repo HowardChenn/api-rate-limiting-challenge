@@ -13,4 +13,15 @@ type RateLimitDecision = {
   remaining: number;
 };
 
-export type { RateLimitDecision, RateLimitPolicy };
+type RateLimitCheck = {
+  clientIp: string;
+  policy: RateLimitPolicy;
+  limit: number;
+  overrideClientId?: string;
+};
+
+interface RateLimitService {
+  check(input: RateLimitCheck): Promise<RateLimitDecision>;
+}
+
+export type { RateLimitDecision, RateLimitPolicy, RateLimitCheck, RateLimitService };

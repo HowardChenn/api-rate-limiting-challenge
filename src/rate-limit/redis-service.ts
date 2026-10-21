@@ -1,6 +1,7 @@
-import { redis } from "../config/redis.js";
+import { env } from "../config/env.js";
+import { redis } from "../infrastructure/redis.js";
 import { buildRateLimitKey, buildRateLimitOverrideKey } from "./key.js";
-import type { RateLimitCheck, RateLimitService } from "./service.js";
+import type { RateLimitCheck, RateLimitService } from "./types.js";
 import type { RateLimitDecision } from "./types.js";
 import { randomUUID } from "node:crypto";
 
@@ -38,7 +39,7 @@ const slidingWindowLogScript = `
 
 class RedisRateLimitService implements RateLimitService {
     async check(input: RateLimitCheck): Promise<RateLimitDecision> {
-        const prefix = process.env.REDIS_KEY_PREFIX;
+        const prefix = env.redisKeyPrefix;
 
         if (!prefix) {
             throw new Error("REDIS_KEY_PREFIX is not configured");

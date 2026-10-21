@@ -1,194 +1,108 @@
 import { describe, it, expect, vi } from "vitest";
 import type { Request, Response } from "express";
-import { createRateLimit } from "../../src/middleware/rate-limit.js";
-import type { RateLimitService } from "../../src/rate-limit/service.js";
+import { createRateLimit } from "../../src/rate-limit/middleware.js";
+import type { RateLimitPolicy } from "../../src/rate-limit/types.js";
 import { rateLimitPolicies } from "../../src/rate-limit/policies.js";
 
+function setup(policy: RateLimitPolicy = rateLimitPolicies.default, authenticated = false) {
+  const request = {
+    ip: "203.0.113.50",
+    ...(authenticated ? { auth: { clientId: "client-123" } } : {}),
+  } as Request;
+  const response = {
+    status: vi.fn().mockReturnThis(),
+    json: vi.fn(),
+  } as unknown as Response;
+  const next = vi.fn();
+  const service = {
+    check: vi.fn().mockResolvedValue({ allowed: true, limit: 100, remaining: 99 }),
+  };
+  return { request, response, next, service, middleware: createRateLimit(service, policy) };
+}
+
+function expectNoResponse(response: Response) {
+  expect(response.status).not.toHaveBeenCalled();
+  expect(response.json).not.toHaveBeenCalled();
+}
+
 describe("createRateLimit", () => {
-  // allow request 
-  it("calls next when the request is allowed", async () => {
-    // arrange  
-    const mockNext = vi.fn();
+  it.each([
+    { count: 1, remaining: 99 },
+    { count: 100, remaining: 0 },
+  ])("allows request $count with a limit of 100", async ({ remaining }) => {
+    const { request, response, next, service, middleware } = setup();
+    service.check.mockResolvedValue({ allowed: true, limit: 100, remaining });
 
-    const mockRequest = {
-      ip: "203.0.113.50",
-      method: "GET",
-      path: "/api/products",
-    } as unknown as Request;
+    await middleware(request, response, next);
 
-    const mockResponse = {
-      status: vi.fn(),
-      json: vi.fn(),
-    } as unknown as Response;
-
-    const mockRateLimitService: RateLimitService = {
-      check: vi.fn().mockResolvedValue({
-        allowed: true,
-        limit: 100,
-        remaining: 99,
-      }),
-    };
-
-    const rateLimitMiddleware = createRateLimit(mockRateLimitService);
-
-    // act 
-    await rateLimitMiddleware(mockRequest, mockResponse, mockNext);    
-    
-    // assert 
-    expect(mockNext).toHaveBeenCalledTimes(1);
-    expect(mockNext).toHaveBeenCalledWith();
-    expect(mockResponse.status).not.toHaveBeenCalled();
-    expect(mockResponse.json).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledExactlyOnceWith();
+    expectNoResponse(response);
+    expect(service.check).toHaveBeenCalledExactlyOnceWith({
+      clientIp: request.ip, policy: rateLimitPolicies.default, limit: 100, overrideClientId: undefined,
+    });
   });
 
-  // reject request
-  it("returns 429 when the request is rejected", async () => {
-    const mockNext = vi.fn();
+  it("rejects request 101 with a limit of 100", async () => {
+    const { request, response, next, service, middleware } = setup();
+    service.check.mockResolvedValue({ allowed: false, limit: 100, remaining: 0 });
 
-    const mockRequest = {
-      ip: "203.0.113.50",
-      method: "GET",
-      path: "/api/products",
-    } as unknown as Request;
+    await middleware(request, response, next);
 
-    const mockResponse = {
-      status: vi.fn().mockReturnThis(),
-      json: vi.fn(),
-    } as unknown as Response;
-
-    const mockRateLimitService: RateLimitService = {
-      check: vi.fn().mockResolvedValue({
-        allowed: false,
-        limit: 100,
-        remaining: 0,
-      }),
-    };
-
-    const rateLimitMiddleware = createRateLimit(mockRateLimitService);
-
-    await rateLimitMiddleware(mockRequest, mockResponse, mockNext);
-
-    expect(mockResponse.status).toHaveBeenCalledTimes(1);
-    expect(mockResponse.status).toHaveBeenCalledWith(429);
-    expect(mockResponse.json).toHaveBeenCalledTimes(1);
-    expect(mockResponse.json).toHaveBeenCalledWith({
+    expect(response.status).toHaveBeenCalledExactlyOnceWith(429);
+    expect(response.json).toHaveBeenCalledExactlyOnceWith({
       error: "rate_limit_exceeded",
       message: "Too many requests. Please try again later.",
     });
-    expect(mockNext).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
   });
 
-  // auth - default - limit 200 - override id
-  it("passes the client ID for an authenticated default request", async () => {
-    const mockNext = vi.fn();
+  it.each([
+    { name: "authenticated default", policy: rateLimitPolicies.default, authenticated: true, limit: 200, overrideClientId: "client-123" },
+    { name: "unauthenticated default", policy: rateLimitPolicies.default, authenticated: false, limit: 100, overrideClientId: undefined },
+    { name: "authenticated login", policy: rateLimitPolicies.login, authenticated: true, limit: 20, overrideClientId: undefined },
+    { name: "unauthenticated login", policy: rateLimitPolicies.login, authenticated: false, limit: 10, overrideClientId: undefined },
+  ])("passes the exact service input for $name", async ({ policy, authenticated, limit, overrideClientId }) => {
+    const { request, response, next, service, middleware } = setup(policy, authenticated);
 
-    const mockRequest = {
-      ip: "203.0.113.50",
-      method: "GET",
-      path: "/api/products",
-      auth: {
-        clientId: "client-123",
-      },
-    } as unknown as Request;
+    await middleware(request, response, next);
 
-    const mockResponse = {
-      status: vi.fn(),
-      json: vi.fn(),
-    } as unknown as Response;
+    expect(service.check).toHaveBeenCalledExactlyOnceWith({
+      clientIp: request.ip, policy, limit, overrideClientId,
+    });
+    expect(next).toHaveBeenCalledExactlyOnceWith();
+    expectNoResponse(response);
+  });
 
-    const mockRateLimitService: RateLimitService = {
-      check: vi.fn().mockResolvedValue({
-        allowed: true,
-        limit: 200,
-        remaining: 199,
-      }),
-    };
+  it("uses the supplied policy values", async () => {
+    const policy = { id: "custom", windowMs: 5000, limits: { authenticated: 7, unauthenticated: 3 } };
+    const { request, response, next, service, middleware } = setup(policy);
 
-    const rateLimitMiddleware = createRateLimit(mockRateLimitService);
+    await middleware(request, response, next);
 
-    await rateLimitMiddleware(mockRequest, mockResponse, mockNext);
-
-    expect(mockRateLimitService.check).toHaveBeenCalledTimes(1);
-    expect(mockRateLimitService.check).toHaveBeenCalledWith({
-      clientIp: "203.0.113.50",
-      policy: rateLimitPolicies.default,
-      limit: 200,
-      overrideClientId: "client-123",
+    expect(service.check).toHaveBeenCalledExactlyOnceWith({
+      clientIp: request.ip, policy, limit: 3, overrideClientId: undefined,
     });
   });
 
-  // auth - login - limit 20 - no override 
-  it("does not pass an override client ID for an authenticated login request", async () => {
-    const mockNext = vi.fn();
+  it("throws a service error without sending a response or calling next", async () => {
+    const { request, response, next, service, middleware } = setup();
+    const error = new Error("Redis unavailable");
+    service.check.mockRejectedValue(error);
 
-    const mockRequest = {
-      ip: "203.0.113.50",
-      method: "POST",
-      path: "/api/login",
-      auth: {
-          clientId: "client-123",
-      },
-    } as unknown as Request;
+    await expect(middleware(request, response, next)).rejects.toBe(error);
 
-    const mockResponse = {
-      status: vi.fn(),
-      json: vi.fn(),
-    } as unknown as Response;
-
-    const mockRateLimitService: RateLimitService = {
-      check: vi.fn().mockResolvedValue({
-        allowed: true,
-        limit: 20,
-        remaining: 19,
-      }),
-    };
-
-    const rateLimitMiddleware = createRateLimit(mockRateLimitService);
-
-    await rateLimitMiddleware(mockRequest, mockResponse, mockNext);
-
-    expect(mockRateLimitService.check).toHaveBeenCalledTimes(1);
-    expect(mockRateLimitService.check).toHaveBeenCalledWith({
-      clientIp: "203.0.113.50",
-      policy: rateLimitPolicies.login,
-      limit: 20,
-      overrideClientId: undefined,
-    });
+    expect(next).not.toHaveBeenCalled();
+    expectNoResponse(response);
   });
 
-  // anonymous - default - limit 100 - no override
-  it("uses the anonymous default limit without an override client ID", async () => {
-    const mockNext = vi.fn();
+  it("throws for a missing IP without checking the service or sending a response", async () => {
+    const { response, next, service, middleware } = setup();
 
-    const mockRequest = {
-      ip: "203.0.113.50",
-      method: "GET",
-      path: "/api/products",
-    } as unknown as Request;
+    await expect(middleware({} as Request, response, next))
+      .rejects.toThrow("Unable to determine client IP address");
 
-    const mockResponse = {
-      status: vi.fn(),
-      json: vi.fn(),
-    } as unknown as Response;
-
-    const mockRateLimitService: RateLimitService = {
-      check: vi.fn().mockResolvedValue({
-        allowed: true,
-        limit: 100,
-        remaining: 99,
-      }),
-    };
-
-    const rateLimitMiddleware = createRateLimit(mockRateLimitService);
-
-    await rateLimitMiddleware(mockRequest, mockResponse, mockNext);
-
-    expect(mockRateLimitService.check).toHaveBeenCalledTimes(1);
-    expect(mockRateLimitService.check).toHaveBeenCalledWith({
-      clientIp: "203.0.113.50",
-      policy: rateLimitPolicies.default,
-      limit: 100,
-      overrideClientId: undefined,
-    });
+    expect(service.check).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+    expectNoResponse(response);
   });
 });
